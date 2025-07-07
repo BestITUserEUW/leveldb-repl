@@ -1,0 +1,38 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+    - -Wno-unknown-warning-option
+    - -std=gnu++23
+    - -Iinclude
+  Remove: [-m*, -f*]
+  Compiler: /usr/bin/gcc-14
+
+Index:
+  Background: Build
+  StandardLibrary: true
+
+Hover:
+  ShowAKA: false
+
+Completion:
+  AllScopes: Yes
+  
+InlayHints:
+  BlockEnd: false
+  Designators: false
+  Enabled: true
+  ParameterNames: false
+  DeducedTypes: false
+  TypeNameLimit: 24
+
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    FastCheckFilter: Strict
+    Add: 
+      - modernize-*
+      - performance-*
+      - bugprone-use-after-move
+    Remove:
+      - modernize-use-nodiscard
+      - modernize-avoid-c-arrays

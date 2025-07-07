@@ -1,0 +1,7 @@
+{
+    "editor.formatOnSave": true,
+    "cmake.configureOnOpen": false,
+    "cmake.configureOnEdit": false,
+    "clangd.path": "/usr/bin/clangd",
+    "files.associations": {}
+}
