@@ -16,63 +16,110 @@
 using std::print;
 using std::println;
 
+#define EXPECT_DB_OPENED(db)                         \
+    do {                                             \
+        if (!db) {                                   \
+            println("Expected database to be open"); \
+            return;                                  \
+        }                                            \
+    } while (0)
+
+#define EXPECT_ARGS_SIZE(args, len)                 \
+    do {                                            \
+        if (args.size() != len) {                   \
+            println("Expected {} arguments!", len); \
+            return;                                 \
+        }                                           \
+    } while (0)
+
 std::unique_ptr<leveldb::DB> db;
 
 enum class Instruction : uint8_t { help, exit, open, close, read, write, dump };
 
+struct InstructionInfo {
+    std::string_view description;
+    std::string_view args;
+};
+
 using ArgsVector = std::vector<std::string_view>;
 
-auto ViewToSlice(std::string_view view) { return leveldb::Slice(view.data(), view.size()); }
+constexpr auto ViewToSlice(std::string_view view) { return leveldb::Slice(view.data(), view.size()); }
+
+auto GetInstructionInfo(Instruction inst) -> InstructionInfo {
+    switch (inst) {
+        using enum Instruction;
+        case help:
+            return {.description = "Print this help message", .args = ""};
+        case exit:
+            return {.description = "Exit the repl", .args = ""};
+        case open:
+            return {.description = "Open or create a database", .args = "path"};
+        case close:
+            return {.description = "Close database", .args = "path"};
+        case read:
+            return {.description = "Read value from database", .args = "key"};
+        case write:
+            return {.description = "Write value to database", .args = "key value"};
+        case dump:
+            return {.description = "Dump whole database", .args = ""};
+        default:
+            std::unreachable();
+    }
+}
+
+auto ParseInput(std::string_view input) -> ArgsVector {
+    static auto slice = [](std::string_view input, size_t pos, size_t idx, bool erease_quotes) {
+        auto length = idx - pos;
+        if (erease_quotes) {
+            pos++;
+            length -= 2;
+        }
+        return input.substr(pos, length);
+    };
+
+    ArgsVector result;
+    size_t pos{};
+    struct Flags {
+        bool skipping : 1;
+        bool erease_quotes : 1;
+    } flags{};
+
+    char current{};
+
+    for (size_t i = 0; i < input.size(); i++) {
+        // Catch single and double quotes
+        if (input[i] == 0x22 || input[i] == 0x27) {
+            if (flags.skipping) {
+                // Don't end skipping we allow double quotes in single quotes and vice versa
+                if (current != input[i]) continue;
+                flags.erease_quotes = true;
+            } else {
+                current = input[i];
+            }
+
+            flags.skipping = !flags.skipping;
+            continue;
+        }
+
+        // Skip if we are skipping or not a space
+        if (input[i] != 0x20 || flags.skipping) {
+            continue;
+        }
+
+        result.push_back(slice(input, pos, i, flags.erease_quotes));
+        pos = i + 1;
+        flags.erease_quotes = false;
+    }
+
+    result.push_back(slice(input, pos, input.size(), flags.erease_quotes));
+    return result;
+}
 
 [[noreturn]] void Exit() {
     if (db) {
         db.reset();
     }
     std::exit(EXIT_SUCCESS);
-}
-
-auto GetInstructionDescription(Instruction inst) -> std::string_view {
-    switch (inst) {
-        using enum Instruction;
-        case help:
-            return "Print this help message";
-        case exit:
-            return "Exit the repl";
-        case open:
-            return "Open or create a database";
-        case close:
-            return "Close database";
-        case read:
-            return "Read value from database";
-        case write:
-            return "Write value to database";
-        case dump:
-            return "Dump whole database";
-        default:
-            return "N.A.";
-    }
-}
-
-auto GetInstructionArgs(Instruction inst) -> std::string_view {
-    switch (inst) {
-        using enum Instruction;
-        case help:
-            return "";
-        case exit:
-            return "";
-        case open:
-            return "path";
-        case close:
-            return "";
-        case read:
-            return "key";
-        case write:
-            return "key value";
-        case dump:
-            return "";
-        default:
-            return "N.A.";
-    }
 }
 
 void PrintHelp() {
@@ -83,16 +130,13 @@ void PrintHelp() {
     println("Example: open ./database.ldb\n");
     println(kPrintFmt, "Instruction", "Arguments", "Description");
     enchantum::for_each<Instruction>([=](auto c) {
-        println(kPrintFmt, enchantum::to_string(c.value), GetInstructionArgs(c.value),
-                GetInstructionDescription(c.value));
+        const auto info = GetInstructionInfo(c.value);
+        println(kPrintFmt, enchantum::to_string(c.value), info.args, info.description);
     });
 }
 
-void OpenDb(const ArgsVector& args) {
-    if (args.size() != 1) {
-        println("open expects one argument!");
-        return;
-    }
+void Open(const ArgsVector& args) {
+    EXPECT_ARGS_SIZE(args, 1);
 
     leveldb::Options opts{};
     opts.create_if_missing = true;
@@ -103,24 +147,17 @@ void OpenDb(const ArgsVector& args) {
     if (!status.ok()) {
         println("open db: {} failure: {}!", path, status.ToString());
     }
-    println("Opened database: {}", path);
+    println("OK");
 }
 
-void CloseDb() {
-    if (!db) {
-        println("No openend database present!");
-        return;
-    }
-
+void Close() {
+    EXPECT_DB_OPENED(db);
     db.reset();
     println("Closed database");
 }
 
-void DumpDb() {
-    if (!db) {
-        println("No opened database present!");
-        return;
-    }
+void Dump() {
+    EXPECT_DB_OPENED(db);
 
     auto it = std::unique_ptr<leveldb::Iterator>(db->NewIterator(leveldb::ReadOptions()));
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
@@ -128,16 +165,9 @@ void DumpDb() {
     }
 }
 
-void WriteDb(const ArgsVector& args) {
-    if (args.size() != 2) {
-        println("write expects two arguments!");
-        return;
-    }
-
-    if (!db) {
-        println("No opened database present!");
-        return;
-    }
+void Write(const ArgsVector& args) {
+    EXPECT_ARGS_SIZE(args, 2);
+    EXPECT_DB_OPENED(db);
 
     auto key = args[0];
     auto value = args[1];
@@ -149,19 +179,12 @@ void WriteDb(const ArgsVector& args) {
         println("write key: {} value: {} failure: {}!", key, value, status.ToString());
         return;
     }
-    println("write key: {} value: {}", key, value);
+    println("OK");
 }
 
-void ReadDb(const ArgsVector& args) {
-    if (args.size() != 1) {
-        println("read expects one argument!");
-        return;
-    }
-
-    if (!db) {
-        println("No opened database present!");
-        return;
-    }
+void Read(const ArgsVector& args) {
+    EXPECT_ARGS_SIZE(args, 1);
+    EXPECT_DB_OPENED(db);
 
     auto key = args[0];
     leveldb::ReadOptions opts{};
@@ -183,19 +206,19 @@ void HandleInstruction(Instruction inst, const ArgsVector& args) {
         case exit:
             Exit();
         case open:
-            OpenDb(args);
+            Open(args);
             return;
         case close:
-            CloseDb();
+            Close();
             return;
         case read:
-            ReadDb(args);
+            Read(args);
             return;
         case write:
-            WriteDb(args);
+            Write(args);
             return;
         case dump:
-            DumpDb();
+            Dump();
             return;
         default:
             std::unreachable();
@@ -204,6 +227,7 @@ void HandleInstruction(Instruction inst, const ArgsVector& args) {
 
 void MainLoop() {
     std::string user_input;
+    user_input.reserve(64);
 
     for (;;) {
         user_input.clear();
@@ -213,7 +237,7 @@ void MainLoop() {
             continue;
         }
 
-        auto args = oryx::StringSplit(user_input, ' ');
+        auto args = ParseInput(user_input);
         if (args.size() < 1) {
             println("Cannot understand this syntax!");
             continue;
