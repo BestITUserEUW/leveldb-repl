@@ -32,16 +32,14 @@ struct InstructionInfo {
     bool require_db = false;
 };
 
-static std::unique_ptr<leveldb::DB> database;
+std::unique_ptr<leveldb::DB> database;
 
 constexpr auto ViewToSlice(std::string_view view) -> leveldb::Slice;
 constexpr auto GetInfo(Instruction inst) -> const InstructionInfo&;
 
 struct ExitFunctor {
     void operator()() const {
-        if (database) {
-            database.reset();
-        }
+        database.reset();
         std::exit(EXIT_SUCCESS);
     }
 };
@@ -181,15 +179,6 @@ auto SliceInput(std::string_view input, size_t start, size_t end, bool erease_qu
 }
 
 auto ParseInput(std::string_view input) -> std::optional<ArgsVector> {
-    static auto slice = [](std::string_view input, size_t pos, size_t idx, bool erease_quotes) {
-        auto length = idx - pos;
-        if (erease_quotes) {
-            pos++;
-            length -= 2;
-        }
-        return input.substr(pos, length);
-    };
-
     ArgsVector result;
     size_t pos{};
     struct Flags {
@@ -221,7 +210,7 @@ auto ParseInput(std::string_view input) -> std::optional<ArgsVector> {
             continue;
         }
 
-        result.push_back(slice(input, pos, i, flags.erease_quotes));
+        result.push_back(SliceInput(input, pos, i, flags.erease_quotes));
         pos = i + 1;
         flags.erease_quotes = false;
     }
@@ -231,12 +220,17 @@ auto ParseInput(std::string_view input) -> std::optional<ArgsVector> {
         return std::nullopt;
     }
 
-    result.push_back(slice(input, pos, input.size(), flags.erease_quotes));
+    result.push_back(SliceInput(input, pos, input.size(), flags.erease_quotes));
     return result;
 }
 
-void MainLoop() {
-    std::string user_input;
+auto main() -> int {
+    signal(SIGINT, [](int) {
+        println("\nUser Interrupt");
+        ExitFunctor()();
+    });
+
+    std::string user_input{};
     user_input.reserve(32);
 
     println("LevelDB R.E.P.L.");
@@ -275,14 +269,5 @@ void MainLoop() {
 
         info.impl(args);
     }
-}
-
-auto main() -> int {
-    signal(SIGINT, [](int) {
-        println("\nUser Interrupt");
-        ExitFunctor()();
-    });
-
-    MainLoop();
     return 0;
 }

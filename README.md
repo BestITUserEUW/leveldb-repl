@@ -7,3 +7,4 @@ LevelDB Repl. This project is a work in progress
 - Proper README.md
 - Tests
 - Binary Distribution
+- Add delete instruction
