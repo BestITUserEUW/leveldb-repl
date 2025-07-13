@@ -17,7 +17,7 @@ using std::print;
 using std::println;
 using ArgsVector = std::vector<std::string_view>;
 
-enum class Instruction : uint8_t { help, exit, open, close, read, write, dump };
+enum class Instruction : uint8_t { help, exit, open, close, read, write, dump, remove };
 
 struct InstructionInfo {
     using ImplFn = void (*)(const ArgsVector&);
@@ -110,24 +110,29 @@ struct ReadFunctor {
     void operator()(const ArgsVector& args) const {
         auto key = args[0];
         leveldb::ReadOptions opts{};
-        std::string result;
-        const auto status = database->Get(opts, ViewToSlice(key), &result);
+        std::string value;
+        const auto status = database->Get(opts, ViewToSlice(key), &value);
         if (!status.ok()) {
             println("error: read {} status='{}'", key, status.ToString());
             return;
         }
-        println("{}", result);
+        println("{}", value);
     }
 };
 
-template <class T>
-struct Equals {
-    Equals(const T& rhs)
-        : rhs(rhs) {}
+struct RemoveFunctor {
+    void operator()(const ArgsVector& args) const {
+        auto key = args[0];
+        leveldb::WriteOptions opts{};
+        opts.sync = true;
 
-    auto operator()(T lhs) const -> bool { return lhs == rhs; }
-
-    const T& rhs;
+        const auto status = database->Delete(opts, ViewToSlice(key));
+        if (!status.ok()) {
+            println("error: remove {} status='{}'", key, status.ToString());
+            return;
+        }
+        println("OK");
+    }
 };
 
 template <typename F>
@@ -144,16 +149,16 @@ constexpr auto ViewToSlice(std::string_view view) -> leveldb::Slice { return {vi
 
 constexpr auto GetInfo(Instruction inst) -> const InstructionInfo& {
     using KeyValue = std::pair<Instruction, InstructionInfo>;
-    static constexpr std::array<KeyValue, 7> infos{{
-        {Instruction::help, InstructionInfo("Print this help message", {}, WrapNoArgs<PrintHelpFunctor>())},
-        {Instruction::exit, InstructionInfo("Exit the repl", {}, WrapNoArgs<ExitFunctor>())},
-        {Instruction::close, InstructionInfo("Close database", {}, WrapNoArgs<CloseFunctor>(), true)},
-        {Instruction::open, InstructionInfo("Open database", {"path", 1}, Wrap<OpenFunctor>())},
-        {Instruction::read, InstructionInfo("Read value from database", {"key", 1}, Wrap<ReadFunctor>(), true)},
-        {Instruction::write, InstructionInfo("Write value to database", {"key value", 2}, Wrap<WriteFunctor>(), true)},
-        {Instruction::dump, InstructionInfo("Dump whole database", {}, WrapNoArgs<DumpFunctor>(), true)},
-    }};
-    return std::ranges::find_if(infos, Equals<Instruction>{inst}, &KeyValue::first)->second;
+    static constexpr std::array<KeyValue, 8> infos{
+        {{Instruction::help, InstructionInfo("Print this help message", {}, WrapNoArgs<PrintHelpFunctor>())},
+         {Instruction::exit, InstructionInfo("Exit the repl", {}, WrapNoArgs<ExitFunctor>())},
+         {Instruction::close, InstructionInfo("Close database", {}, WrapNoArgs<CloseFunctor>(), true)},
+         {Instruction::open, InstructionInfo("Open database", {"path", 1}, Wrap<OpenFunctor>())},
+         {Instruction::read, InstructionInfo("Read value from db", {"key", 1}, Wrap<ReadFunctor>(), true)},
+         {Instruction::write, InstructionInfo("Write value to db", {"key value", 2}, Wrap<WriteFunctor>(), true)},
+         {Instruction::dump, InstructionInfo("Print all items in db", {}, WrapNoArgs<DumpFunctor>(), true)},
+         {Instruction::remove, InstructionInfo("Remove an item from db", {"key", 1}, Wrap<RemoveFunctor>(), true)}}};
+    return std::ranges::find(infos, inst, &KeyValue::first)->second;
 }
 
 void PrintInvalidStateError(Instruction inst, std::string_view requirement) {
