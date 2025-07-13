@@ -8,7 +8,7 @@ This project is built in **C++23** and serves as an interactive shell to experim
 
 ## Features
 
-- Open (Optionally creates if not present)
+- Open (Automatically tries to create if not present)
 - Reading from database
 - Writing values to database
 - Delete values from database
@@ -30,8 +30,6 @@ write "hello world" 'This will "also be written"'
 ---
 
 ## Building
-
-You can compile the project using your preferred method. Here's a basic example using g++:
 
 ```bash
 cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -H.
