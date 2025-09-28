@@ -10,7 +10,7 @@ include(FetchContent)
 FetchContent_Declare(
     oryx-crt-cpp
     GIT_REPOSITORY https://github.com/BestITUserEUW/oryx-crt-cpp.git
-    GIT_TAG main
+    GIT_TAG v0.1.0
     OVERRIDE_FIND_PACKAGE
 )
 

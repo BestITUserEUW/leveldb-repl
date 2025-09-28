@@ -12,12 +12,14 @@
 
 #include <leveldb/db.h>
 #include <oryx/enchantum.hpp>
+#include <oryx/types.hpp>
 
+using namespace oryx;
 using std::print;
 using std::println;
 using ArgsVector = std::vector<std::string_view>;
 
-enum class Instruction : uint8_t { help, exit, open, close, read, write, dump, remove };
+enum class Instruction : u8 { help, exit, open, close, read, write, dump, remove };
 
 struct InstructionInfo {
     using ImplFn = void (*)(const ArgsVector&);
@@ -153,11 +155,14 @@ constexpr auto GetInfo(Instruction inst) -> const InstructionInfo& {
         {{Instruction::help, InstructionInfo("Print this help message", {}, WrapNoArgs<PrintHelpFunctor>())},
          {Instruction::exit, InstructionInfo("Exit the repl", {}, WrapNoArgs<ExitFunctor>())},
          {Instruction::close, InstructionInfo("Close database", {}, WrapNoArgs<CloseFunctor>(), true)},
-         {Instruction::open, InstructionInfo("Open database", {"path", 1}, Wrap<OpenFunctor>())},
-         {Instruction::read, InstructionInfo("Read value from db", {"key", 1}, Wrap<ReadFunctor>(), true)},
-         {Instruction::write, InstructionInfo("Write value to db", {"key value", 2}, Wrap<WriteFunctor>(), true)},
+         {Instruction::open, InstructionInfo("Open database", {.data = "path", .size = 1}, Wrap<OpenFunctor>())},
+         {Instruction::read,
+          InstructionInfo("Read value from db", {.data = "key", .size = 1}, Wrap<ReadFunctor>(), true)},
+         {Instruction::write,
+          InstructionInfo("Write value to db", {.data = "key value", .size = 2}, Wrap<WriteFunctor>(), true)},
          {Instruction::dump, InstructionInfo("Print all items in db", {}, WrapNoArgs<DumpFunctor>(), true)},
-         {Instruction::remove, InstructionInfo("Remove an item from db", {"key", 1}, Wrap<RemoveFunctor>(), true)}}};
+         {Instruction::remove,
+          InstructionInfo("Remove an item from db", {.data = "key", .size = 1}, Wrap<RemoveFunctor>(), true)}}};
     return std::ranges::find(infos, inst, &KeyValue::first)->second;
 }
 
