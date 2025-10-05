@@ -11,15 +11,13 @@
 #include <vector>
 
 #include <leveldb/db.h>
-#include <oryx/enchantum.hpp>
-#include <oryx/types.hpp>
+#include <oryx/crt/enchantum.hpp>
 
-using namespace oryx;
 using std::print;
 using std::println;
 using ArgsVector = std::vector<std::string_view>;
 
-enum class Instruction : u8 { help, exit, open, close, read, write, dump, remove };
+enum class Instruction : uint8_t { help, exit, open, close, read, write, dump, remove };
 
 struct InstructionInfo {
     using ImplFn = void (*)(const ArgsVector&);
